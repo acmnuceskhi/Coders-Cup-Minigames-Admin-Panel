@@ -20,6 +20,7 @@ class _AddGamePageState extends State<AddGamePage> {
       required: false,
     ),
   ];
+  bool _codeBased = false;
   bool _saving = false;
 
   @override
@@ -51,6 +52,7 @@ class _AddGamePageState extends State<AddGamePage> {
       await FirebaseFirestore.instance.collection('games').add({
         'name': name,
         'limit': limit,
+  'codeBased': _codeBased,
         'formFields': fields,
       });
 
@@ -207,6 +209,12 @@ class _AddGamePageState extends State<AddGamePage> {
                 ),
               ),
               const SizedBox(height: 16),
+              CheckboxListTile(
+                title: const Text('Code-based game (give users unique codes)'),
+                value: _codeBased,
+                onChanged: (v) => setState(() => _codeBased = v ?? false),
+              ),
+              const SizedBox(height: 8),
               ElevatedButton(
                 onPressed: _saving ? null : _save,
                 child: _saving
