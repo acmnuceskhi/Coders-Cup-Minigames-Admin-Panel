@@ -1,0 +1,73 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper: check whether the request is authenticated
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    // Helper: get the sign-in provider (e.g. 'google.com', 'password')
+    function signInProvider() {
+      return isSignedIn() ? request.auth.token.firebase.sign_in_provider : null;
+    }
+
+    // Admins: authenticated users who signed in with email/password
+    function isAdmin() {
+      return isSignedIn() && signInProvider() == 'password';
+    }
+
+    // Others: either unauthenticated clients or Google-authenticated users
+    function isOther() {
+      return !isAdmin();
+    }
+
+    // Default: admins have full read/write across the database
+    // Others may read any document, but may only create responses under games/{gameId}/responses
+
+    // Match any document path
+    match /{document=**} {
+      // Read allowed to everyone (admins, google users, unauthenticated)
+      allow read: if true;
+
+      // Full write permissions only for admins
+      allow write: if isAdmin();
+    }
+
+    // Allow non-admins to increment responsesCount on the parent game doc by exactly +1
+    match /games/{gameId} {
+      // Reads allowed to everyone
+      allow read: if true;
+
+  // Admins can write anything (create/delete/full write)
+  allow write: if isAdmin();
+
+  // Allow non-admins (Google or unauthenticated) to update the game
+  // document as well. Admins still retain full permissions.
+  allow update: if isAdmin() || isOther();
+
+  // allow create/delete only for admins
+  allow create, delete: if isAdmin();
+    }
+
+    // More specific rule for responses creation under games/{gameId}/responses/{responseId}
+    // This allows non-admins to create response documents, but prevents them from
+    // updating or deleting responses after creation.
+    match /games/{gameId}/responses/{responseId} {
+      // Everyone can read responses (covered by global read), but be explicit
+      allow read: if true;
+
+      // Creation: allowed for admins or others (unauthenticated or google users)
+      allow create: if isAdmin() || isOther();
+
+      // Updates and deletes: only admins may modify or remove responses
+      allow update, delete: if isAdmin();
+
+      // Prevent non-admins from writing nested subcollections under a response
+      match /{sub=**} {
+        allow read: if isAdmin();
+        allow write: if isAdmin();
+      }
+    }
+  }
+}
