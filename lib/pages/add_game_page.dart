@@ -39,7 +39,7 @@ class _AddGamePageState extends State<AddGamePage> {
     _backgroundUrlCtrl.dispose();
     _bottomLeftUrlCtrl.dispose();
     _bottomRightUrlCtrl.dispose();
-  _primaryHexCtrl.dispose();
+    _primaryHexCtrl.dispose();
     for (final f in _fields) {
       f.labelController.dispose();
     }
@@ -68,11 +68,13 @@ class _AddGamePageState extends State<AddGamePage> {
       if (d['formFields'] is List) {
         _fields.clear();
         for (final f in (d['formFields'] as List)) {
-          _fields.add(_FieldEntry(
-            labelController: TextEditingController(text: f['label'] ?? ''),
-            type: f['type'] ?? 'text',
-            required: f['required'] ?? false,
-          ));
+          _fields.add(
+            _FieldEntry(
+              labelController: TextEditingController(text: f['label'] ?? ''),
+              type: f['type'] ?? 'text',
+              required: f['required'] ?? false,
+            ),
+          );
         }
       }
       _codeBased = d['codeBased'] ?? false;

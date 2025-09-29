@@ -59,8 +59,12 @@ class GamesAdminPage extends StatelessWidget {
                         icon: const Icon(Icons.edit),
                         onPressed: () async {
                           final data = d.data();
-                          await Navigator.of(context).push(MaterialPageRoute(
-                              builder: (_) => AddGamePage(gameId: d.id, initialData: data)));
+                          await Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  AddGamePage(gameId: d.id, initialData: data),
+                            ),
+                          );
                         },
                       ),
                       IconButton(
@@ -70,10 +74,20 @@ class GamesAdminPage extends StatelessWidget {
                             context: context,
                             builder: (context) => AlertDialog(
                               title: const Text('Delete game?'),
-                              content: Text('Delete "$name" and all responses? This cannot be undone.'),
+                              content: Text(
+                                'Delete "$name" and all responses? This cannot be undone.',
+                              ),
                               actions: [
-                                TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Cancel')),
-                                TextButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Delete')),
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.of(context).pop(false),
+                                  child: const Text('Cancel'),
+                                ),
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.of(context).pop(true),
+                                  child: const Text('Delete'),
+                                ),
                               ],
                             ),
                           );
@@ -81,12 +95,24 @@ class GamesAdminPage extends StatelessWidget {
                           try {
                             // delete responses subcollection (best-effort batch)
                             final batch = FirebaseFirestore.instance.batch();
-                            final responses = await FirebaseFirestore.instance.collection('games').doc(d.id).collection('responses').limit(500).get();
-                            for (final r in responses.docs) batch.delete(r.reference);
-                            batch.delete(FirebaseFirestore.instance.collection('games').doc(d.id));
+                            final responses = await FirebaseFirestore.instance
+                                .collection('games')
+                                .doc(d.id)
+                                .collection('responses')
+                                .limit(500)
+                                .get();
+                            for (final r in responses.docs)
+                              batch.delete(r.reference);
+                            batch.delete(
+                              FirebaseFirestore.instance
+                                  .collection('games')
+                                  .doc(d.id),
+                            );
                             await batch.commit();
                           } catch (e) {
-                            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to delete: $e')));
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(content: Text('Failed to delete: $e')),
+                            );
                           }
                         },
                       ),
@@ -94,7 +120,8 @@ class GamesAdminPage extends StatelessWidget {
                         icon: const Icon(Icons.list),
                         onPressed: () => Navigator.of(context).push(
                           MaterialPageRoute(
-                            builder: (_) => ResponsesPage(gameId: d.id, gameName: name),
+                            builder: (_) =>
+                                ResponsesPage(gameId: d.id, gameName: name),
                           ),
                         ),
                       ),
