@@ -1,6 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:coders_cup_minigame_admin/utils.dart';
+import 'package:flutter_colorpicker/flutter_colorpicker.dart';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 
 class AddGamePage extends StatefulWidget {
   const AddGamePage({super.key});
@@ -13,6 +16,10 @@ class _AddGamePageState extends State<AddGamePage> {
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
   final _limitCtrl = TextEditingController(text: '100');
+  final _backgroundUrlCtrl = TextEditingController();
+  final _bottomLeftUrlCtrl = TextEditingController();
+  final _bottomRightUrlCtrl = TextEditingController();
+  Color? _primaryColor;
   final List<_FieldEntry> _fields = [
     _FieldEntry(
       labelController: TextEditingController(text: 'Name'),
@@ -27,6 +34,9 @@ class _AddGamePageState extends State<AddGamePage> {
   void dispose() {
     _nameCtrl.dispose();
     _limitCtrl.dispose();
+    _backgroundUrlCtrl.dispose();
+    _bottomLeftUrlCtrl.dispose();
+    _bottomRightUrlCtrl.dispose();
     for (final f in _fields) {
       f.labelController.dispose();
     }
@@ -38,7 +48,7 @@ class _AddGamePageState extends State<AddGamePage> {
     setState(() => _saving = true);
     try {
       final name = _nameCtrl.text.trim();
-      final limit = int.tryParse(_limitCtrl.text) ?? 0;
+      final limit = int.tryParse(_limitCtrl.text);
       final fields = _fields
           .map(
             (f) => {
@@ -49,13 +59,25 @@ class _AddGamePageState extends State<AddGamePage> {
           )
           .toList();
 
-      await FirebaseFirestore.instance.collection('games').add({
+      final gamesRef = FirebaseFirestore.instance.collection('games');
+      final payload = <String, dynamic>{
         'name': name,
-        'limit': limit,
-  'codeBased': _codeBased,
+        if (limit != null) 'limit': limit,
+        'codeBased': _codeBased,
         'formFields': fields,
-      });
+        if (_primaryColor != null)
+          'primaryColor':
+              '#${_primaryColor!.value.toRadixString(16).padLeft(8, '0').toUpperCase()}',
+      };
 
+      final bg = _backgroundUrlCtrl.text.trim();
+      if (bg.isNotEmpty) payload['backgroundImage'] = bg;
+      final bl = _bottomLeftUrlCtrl.text.trim();
+      if (bl.isNotEmpty) payload['bottomLeftImage'] = bl;
+      final br = _bottomRightUrlCtrl.text.trim();
+      if (br.isNotEmpty) payload['bottomRightImage'] = br;
+
+      await gamesRef.add(payload);
       Navigator.of(context).pop();
     } catch (e) {
       ScaffoldMessenger.of(
@@ -100,8 +122,9 @@ class _AddGamePageState extends State<AddGamePage> {
                     children: [Text('Limit')],
                   ),
                 ),
-                validator: (v) =>
-                    (v == null || int.tryParse(v) == null) ? 'Invalid' : null,
+                validator: (v) => (v == null || v.trim().isEmpty)
+                    ? null
+                    : (int.tryParse(v) == null ? 'Invalid' : null),
               ),
               const SizedBox(height: 8),
               const SizedBox(height: 8),
@@ -213,6 +236,86 @@ class _AddGamePageState extends State<AddGamePage> {
                 title: const Text('Code-based game (give users unique codes)'),
                 value: _codeBased,
                 onChanged: (v) => setState(() => _codeBased = v ?? false),
+              ),
+              const SizedBox(height: 12),
+              // Color picker
+              ListTile(
+                title: const Text('Primary color (optional)'),
+                trailing: Container(
+                  width: 36,
+                  height: 24,
+                  decoration: BoxDecoration(
+                    color: _primaryColor ?? Colors.transparent,
+                    border: Border.all(color: Colors.grey),
+                  ),
+                ),
+                onTap: () async {
+                  Color temp = _primaryColor ?? Colors.blue;
+                  await showDialog<void>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('Pick primary color'),
+                      content: SingleChildScrollView(
+                        child: ColorPicker(
+                          pickerColor: temp,
+                          onColorChanged: (c) => temp = c,
+                          enableAlpha: false,
+                          showLabel: false,
+                        ),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          child: const Text('Cancel'),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            setState(() => _primaryColor = temp);
+                            Navigator.of(context).pop();
+                          },
+                          child: const Text('Select'),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+              const SizedBox(height: 12),
+              // Image URL fields
+              TextFormField(
+                controller: _backgroundUrlCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Background image URL (optional)',
+                  hintText: 'https://...',
+                ),
+                validator: (v) =>
+                    (v != null && v.isNotEmpty && !v.startsWith('http'))
+                    ? 'Invalid URL'
+                    : null,
+              ),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _bottomLeftUrlCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Bottom-left image URL (optional)',
+                  hintText: 'https://...',
+                ),
+                validator: (v) =>
+                    (v != null && v.isNotEmpty && !v.startsWith('http'))
+                    ? 'Invalid URL'
+                    : null,
+              ),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _bottomRightUrlCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Bottom-right image URL (optional)',
+                  hintText: 'https://...',
+                ),
+                validator: (v) =>
+                    (v != null && v.isNotEmpty && !v.startsWith('http'))
+                    ? 'Invalid URL'
+                    : null,
               ),
               const SizedBox(height: 8),
               ElevatedButton(
