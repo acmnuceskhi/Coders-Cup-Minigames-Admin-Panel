@@ -1,12 +1,13 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:coders_cup_minigame_admin/utils.dart';
-import 'package:flutter_colorpicker/flutter_colorpicker.dart';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 
 class AddGamePage extends StatefulWidget {
-  const AddGamePage({super.key});
+  final String? gameId;
+  final Map<String, dynamic>? initialData;
+
+  const AddGamePage({super.key, this.gameId, this.initialData});
 
   @override
   State<AddGamePage> createState() => _AddGamePageState();
@@ -20,6 +21,7 @@ class _AddGamePageState extends State<AddGamePage> {
   final _bottomLeftUrlCtrl = TextEditingController();
   final _bottomRightUrlCtrl = TextEditingController();
   Color? _primaryColor;
+  final _primaryHexCtrl = TextEditingController();
   final List<_FieldEntry> _fields = [
     _FieldEntry(
       labelController: TextEditingController(text: 'Name'),
@@ -37,10 +39,44 @@ class _AddGamePageState extends State<AddGamePage> {
     _backgroundUrlCtrl.dispose();
     _bottomLeftUrlCtrl.dispose();
     _bottomRightUrlCtrl.dispose();
+  _primaryHexCtrl.dispose();
     for (final f in _fields) {
       f.labelController.dispose();
     }
     super.dispose();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    final d = widget.initialData;
+    if (d != null) {
+      _nameCtrl.text = (d['name'] as String?) ?? '';
+      _limitCtrl.text = (d['limit']?.toString()) ?? '';
+      _backgroundUrlCtrl.text = (d['backgroundImage'] as String?) ?? '';
+      _bottomLeftUrlCtrl.text = (d['bottomLeftImage'] as String?) ?? '';
+      _bottomRightUrlCtrl.text = (d['bottomRightImage'] as String?) ?? '';
+      if (d['primaryColor'] is String) {
+        final rawHex = (d['primaryColor'] as String);
+        _primaryHexCtrl.text = rawHex;
+        final hex = rawHex.replaceAll('#', '');
+        try {
+          final v = int.parse(hex, radix: 16);
+          _primaryColor = Color(v);
+        } catch (_) {}
+      }
+      if (d['formFields'] is List) {
+        _fields.clear();
+        for (final f in (d['formFields'] as List)) {
+          _fields.add(_FieldEntry(
+            labelController: TextEditingController(text: f['label'] ?? ''),
+            type: f['type'] ?? 'text',
+            required: f['required'] ?? false,
+          ));
+        }
+      }
+      _codeBased = d['codeBased'] ?? false;
+    }
   }
 
   Future<void> _save() async {
@@ -77,7 +113,19 @@ class _AddGamePageState extends State<AddGamePage> {
       final br = _bottomRightUrlCtrl.text.trim();
       if (br.isNotEmpty) payload['bottomRightImage'] = br;
 
-      await gamesRef.add(payload);
+      if (widget.gameId != null) {
+        // update: if admin cleared the limit field (limit == null) we should
+        // remove the stored 'limit' field from the document so it becomes null.
+        if (limit == null) {
+          final updatePayload = Map<String, dynamic>.from(payload);
+          updatePayload['limit'] = FieldValue.delete();
+          await gamesRef.doc(widget.gameId).update(updatePayload);
+        } else {
+          await gamesRef.doc(widget.gameId).update(payload);
+        }
+      } else {
+        await gamesRef.add(payload);
+      }
       Navigator.of(context).pop();
     } catch (e) {
       ScaffoldMessenger.of(
@@ -278,6 +326,34 @@ class _AddGamePageState extends State<AddGamePage> {
                       ],
                     ),
                   );
+                },
+              ),
+              const SizedBox(height: 8),
+              TextFormField(
+                controller: _primaryHexCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Primary color hex (e.g. #FF3366FF) - optional',
+                  hintText: '#AARRGGBB or #RRGGBB',
+                ),
+                validator: (v) {
+                  if (v == null || v.trim().isEmpty) return null;
+                  final t = v.trim().replaceAll('#', '');
+                  if (t.length != 6 && t.length != 8) return 'Invalid hex';
+                  try {
+                    int.parse(t, radix: 16);
+                    return null;
+                  } catch (_) {
+                    return 'Invalid hex';
+                  }
+                },
+                onChanged: (v) {
+                  final t = v.trim().replaceAll('#', '');
+                  if (t.length == 6 || t.length == 8) {
+                    try {
+                      final vInt = int.parse(t, radix: 16);
+                      setState(() => _primaryColor = Color(vInt));
+                    } catch (_) {}
+                  }
                 },
               ),
               const SizedBox(height: 12),
