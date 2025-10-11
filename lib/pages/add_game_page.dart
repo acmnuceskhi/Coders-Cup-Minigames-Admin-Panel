@@ -30,6 +30,7 @@ class _AddGamePageState extends State<AddGamePage> {
     ),
   ];
   bool _codeBased = false;
+  bool _active = true;
   bool _saving = false;
 
   @override
@@ -78,6 +79,7 @@ class _AddGamePageState extends State<AddGamePage> {
         }
       }
       _codeBased = d['codeBased'] ?? false;
+  _active = d['active'] ?? true;
     }
   }
 
@@ -102,6 +104,7 @@ class _AddGamePageState extends State<AddGamePage> {
         'name': name,
         if (limit != null) 'limit': limit,
         'codeBased': _codeBased,
+  'active': _active,
         'formFields': fields,
         if (_primaryColor != null)
           'primaryColor':
@@ -286,6 +289,12 @@ class _AddGamePageState extends State<AddGamePage> {
                 title: const Text('Code-based game (give users unique codes)'),
                 value: _codeBased,
                 onChanged: (v) => setState(() => _codeBased = v ?? false),
+              ),
+              const SizedBox(height: 8),
+              CheckboxListTile(
+                title: const Text('Active (show to users)'),
+                value: _active,
+                onChanged: (v) => setState(() => _active = v ?? false),
               ),
               const SizedBox(height: 12),
               // Color picker
