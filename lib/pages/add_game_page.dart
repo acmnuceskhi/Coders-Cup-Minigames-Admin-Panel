@@ -31,6 +31,7 @@ class _AddGamePageState extends State<AddGamePage> {
   ];
   bool _codeBased = false;
   bool _active = true;
+  bool _scoreboardDisabled = false;
   bool _saving = false;
 
   @override
@@ -79,7 +80,8 @@ class _AddGamePageState extends State<AddGamePage> {
         }
       }
       _codeBased = d['codeBased'] ?? false;
-  _active = d['active'] ?? true;
+      _active = d['active'] ?? true;
+      _scoreboardDisabled = d['scoreboardDisabled'] ?? false;
     }
   }
 
@@ -104,7 +106,8 @@ class _AddGamePageState extends State<AddGamePage> {
         'name': name,
         if (limit != null) 'limit': limit,
         'codeBased': _codeBased,
-  'active': _active,
+        'active': _active,
+        'scoreboardDisabled': _scoreboardDisabled,
         'formFields': fields,
         if (_primaryColor != null)
           'primaryColor':
@@ -295,6 +298,13 @@ class _AddGamePageState extends State<AddGamePage> {
                 title: const Text('Active (show to users)'),
                 value: _active,
                 onChanged: (v) => setState(() => _active = v ?? false),
+              ),
+              const SizedBox(height: 8),
+              CheckboxListTile(
+                title: const Text('Disable scoreboard for this game'),
+                value: _scoreboardDisabled,
+                onChanged: (v) =>
+                    setState(() => _scoreboardDisabled = v ?? false),
               ),
               const SizedBox(height: 12),
               // Color picker

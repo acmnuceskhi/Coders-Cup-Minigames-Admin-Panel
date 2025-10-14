@@ -81,10 +81,10 @@ class _LoginPageState extends State<LoginPage> {
       appBar: AppBar(title: const Text('Admin Sign In')),
       body: Padding(
         padding: EdgeInsets.symmetric(
-          vertical: 12.0,
-          horizontal: isLandscape(context)
-              ? MediaQuery.of(context).size.width * 0.2
-              : MediaQuery.of(context).size.width * 0.05,
+          horizontal:
+              MediaQuery.of(context).size.width *
+              (isLandscape(context) ? 0.2 : 0.1),
+          vertical: 16,
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
