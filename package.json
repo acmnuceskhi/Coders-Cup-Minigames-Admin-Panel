@@ -1,0 +1,6 @@
+{
+  "name": "coders_cup_minigame_admin-ci",
+  "version": "1.0.0",
+  "description": "Minimal package.json for CI npm caching.",
+  "private": true
+}
