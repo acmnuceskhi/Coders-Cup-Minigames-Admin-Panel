@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:coders_cup_minigame_admin/utils.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'add_game_page.dart';
 import 'responses_page.dart';
 
@@ -110,6 +111,28 @@ class GamesAdminPage extends StatelessWidget {
                                   .get();
                               for (final r in responses.docs)
                                 batch.delete(r.reference);
+
+                              // attempt to delete associated storage files if paths exist
+                              try {
+                                final data = d.data();
+                                final paths = <String?>[
+                                  data['backgroundImagePath'] as String?,
+                                  data['bottomLeftImagePath'] as String?,
+                                  data['bottomRightImagePath'] as String?,
+                                ];
+                                for (final p in paths) {
+                                  if (p != null && p.isNotEmpty) {
+                                    await FirebaseStorage.instance
+                                        .ref()
+                                        .child(p)
+                                        .delete();
+                                  }
+                                }
+                              } catch (e) {
+                                // best-effort: log but continue
+                                // ignore storage delete errors
+                              }
+
                               batch.delete(
                                 FirebaseFirestore.instance
                                     .collection('games')

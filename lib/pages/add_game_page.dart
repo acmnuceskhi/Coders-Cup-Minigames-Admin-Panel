@@ -2,6 +2,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:coders_cup_minigame_admin/utils.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:file_picker/file_picker.dart';
+// no extra foundation import required
 
 class AddGamePage extends StatefulWidget {
   final String? gameId;
@@ -17,9 +20,22 @@ class _AddGamePageState extends State<AddGamePage> {
   final _formKey = GlobalKey<FormState>();
   final _nameCtrl = TextEditingController();
   final _limitCtrl = TextEditingController(text: '100');
-  final _backgroundUrlCtrl = TextEditingController();
-  final _bottomLeftUrlCtrl = TextEditingController();
-  final _bottomRightUrlCtrl = TextEditingController();
+  // image state: url and storage path (to allow deletion), and optionally a picked file
+  PlatformFile? _backgroundPickedFile;
+  String? _backgroundUrl;
+  String? _backgroundPath;
+
+  PlatformFile? _bottomLeftPickedFile;
+  String? _bottomLeftUrl;
+  String? _bottomLeftPath;
+
+  PlatformFile? _bottomRightPickedFile;
+  String? _bottomRightUrl;
+  String? _bottomRightPath;
+
+  bool _bgUploading = false;
+  bool _blUploading = false;
+  bool _brUploading = false;
   final _descriptionCtrl = TextEditingController();
   final _instructionsCtrl = TextEditingController();
   Color? _primaryColor;
@@ -34,15 +50,15 @@ class _AddGamePageState extends State<AddGamePage> {
   bool _codeBased = false;
   bool _active = true;
   bool _scoreboardDisabled = false;
+  // Whether to allow non-NU IDs to register for this game
+  bool _allowNonNuIds = false;
   bool _saving = false;
 
   @override
   void dispose() {
     _nameCtrl.dispose();
     _limitCtrl.dispose();
-    _backgroundUrlCtrl.dispose();
-    _bottomLeftUrlCtrl.dispose();
-    _bottomRightUrlCtrl.dispose();
+    // no controllers for images to dispose
     _primaryHexCtrl.dispose();
     _descriptionCtrl.dispose();
     _instructionsCtrl.dispose();
@@ -61,9 +77,12 @@ class _AddGamePageState extends State<AddGamePage> {
       _limitCtrl.text = (d['limit']?.toString()) ?? '';
       _descriptionCtrl.text = (d['description'] as String?) ?? '';
       _instructionsCtrl.text = (d['instructions'] as String?) ?? '';
-      _backgroundUrlCtrl.text = (d['backgroundImage'] as String?) ?? '';
-      _bottomLeftUrlCtrl.text = (d['bottomLeftImage'] as String?) ?? '';
-      _bottomRightUrlCtrl.text = (d['bottomRightImage'] as String?) ?? '';
+      _backgroundUrl = (d['backgroundImage'] as String?) ?? null;
+      _backgroundPath = (d['backgroundImagePath'] as String?) ?? null;
+      _bottomLeftUrl = (d['bottomLeftImage'] as String?) ?? null;
+      _bottomLeftPath = (d['bottomLeftImagePath'] as String?) ?? null;
+      _bottomRightUrl = (d['bottomRightImage'] as String?) ?? null;
+      _bottomRightPath = (d['bottomRightImagePath'] as String?) ?? null;
       if (d['primaryColor'] is String) {
         final rawHex = (d['primaryColor'] as String);
         _primaryHexCtrl.text = rawHex;
@@ -88,6 +107,8 @@ class _AddGamePageState extends State<AddGamePage> {
       _codeBased = d['codeBased'] ?? false;
       _active = d['active'] ?? true;
       _scoreboardDisabled = d['scoreboardDisabled'] ?? false;
+      // read allowNonNuIds if present in the document
+      _allowNonNuIds = d['allowNonNuIds'] ?? false;
     }
   }
 
@@ -114,22 +135,31 @@ class _AddGamePageState extends State<AddGamePage> {
         'codeBased': _codeBased,
         'active': _active,
         'scoreboardDisabled': _scoreboardDisabled,
-        if (_descriptionCtrl.text.trim().isNotEmpty)
-          'description': _descriptionCtrl.text.trim(),
-        if (_instructionsCtrl.text.trim().isNotEmpty)
-          'instructions': _instructionsCtrl.text.trim(),
+        'allowNonNuIds': _allowNonNuIds,
+        'description': _descriptionCtrl.text.trim(),
+        'instructions': _instructionsCtrl.text.trim(),
         'formFields': fields,
         if (_primaryColor != null)
           'primaryColor':
               '#${_primaryColor!.value.toRadixString(16).padLeft(8, '0').toUpperCase()}',
       };
 
-      final bg = _backgroundUrlCtrl.text.trim();
-      if (bg.isNotEmpty) payload['backgroundImage'] = bg;
-      final bl = _bottomLeftUrlCtrl.text.trim();
-      if (bl.isNotEmpty) payload['bottomLeftImage'] = bl;
-      final br = _bottomRightUrlCtrl.text.trim();
-      if (br.isNotEmpty) payload['bottomRightImage'] = br;
+      // attach any already-uploaded image URLs/paths
+      if (_backgroundUrl != null && _backgroundUrl!.isNotEmpty) {
+        payload['backgroundImage'] = _backgroundUrl;
+        if (_backgroundPath != null)
+          payload['backgroundImagePath'] = _backgroundPath;
+      }
+      if (_bottomLeftUrl != null && _bottomLeftUrl!.isNotEmpty) {
+        payload['bottomLeftImage'] = _bottomLeftUrl;
+        if (_bottomLeftPath != null)
+          payload['bottomLeftImagePath'] = _bottomLeftPath;
+      }
+      if (_bottomRightUrl != null && _bottomRightUrl!.isNotEmpty) {
+        payload['bottomRightImage'] = _bottomRightUrl;
+        if (_bottomRightPath != null)
+          payload['bottomRightImagePath'] = _bottomRightPath;
+      }
 
       if (widget.gameId != null) {
         // update: if admin cleared the limit field (limit == null) we should
@@ -141,8 +171,78 @@ class _AddGamePageState extends State<AddGamePage> {
         } else {
           await gamesRef.doc(widget.gameId).update(payload);
         }
+        // If there are picked files for an existing game, upload them now
+        final docId = widget.gameId!;
+        if (_backgroundPickedFile != null) {
+          final m = await _uploadPickedFile(
+            docId,
+            _backgroundPickedFile!,
+            'backgroundImage',
+          );
+          await gamesRef.doc(docId).update({
+            'backgroundImage': m['url'],
+            'backgroundImagePath': m['path'],
+          });
+        }
+        if (_bottomLeftPickedFile != null) {
+          final m = await _uploadPickedFile(
+            docId,
+            _bottomLeftPickedFile!,
+            'bottomLeftImage',
+          );
+          await gamesRef.doc(docId).update({
+            'bottomLeftImage': m['url'],
+            'bottomLeftImagePath': m['path'],
+          });
+        }
+        if (_bottomRightPickedFile != null) {
+          final m = await _uploadPickedFile(
+            docId,
+            _bottomRightPickedFile!,
+            'bottomRightImage',
+          );
+          await gamesRef.doc(docId).update({
+            'bottomRightImage': m['url'],
+            'bottomRightImagePath': m['path'],
+          });
+        }
       } else {
-        await gamesRef.add(payload);
+        // create doc first, then upload any picked files and update the doc with URLs/paths
+        final docRef = await gamesRef.add(payload);
+        final docId = docRef.id;
+        if (_backgroundPickedFile != null) {
+          final m = await _uploadPickedFile(
+            docId,
+            _backgroundPickedFile!,
+            'backgroundImage',
+          );
+          await gamesRef.doc(docId).update({
+            'backgroundImage': m['url'],
+            'backgroundImagePath': m['path'],
+          });
+        }
+        if (_bottomLeftPickedFile != null) {
+          final m = await _uploadPickedFile(
+            docId,
+            _bottomLeftPickedFile!,
+            'bottomLeftImage',
+          );
+          await gamesRef.doc(docId).update({
+            'bottomLeftImage': m['url'],
+            'bottomLeftImagePath': m['path'],
+          });
+        }
+        if (_bottomRightPickedFile != null) {
+          final m = await _uploadPickedFile(
+            docId,
+            _bottomRightPickedFile!,
+            'bottomRightImage',
+          );
+          await gamesRef.doc(docId).update({
+            'bottomRightImage': m['url'],
+            'bottomRightImagePath': m['path'],
+          });
+        }
       }
       Navigator.of(context).pop();
     } catch (e) {
@@ -151,6 +251,151 @@ class _AddGamePageState extends State<AddGamePage> {
       ).showSnackBar(SnackBar(content: Text('Failed to save: $e')));
     } finally {
       setState(() => _saving = false);
+    }
+  }
+
+  Future<Map<String, String>> _uploadPickedFile(
+    String docId,
+    PlatformFile file,
+    String fieldName,
+  ) async {
+    // returns {'url': downloadUrl, 'path': fullPath}
+    final storageRef = FirebaseStorage.instance
+        .ref()
+        .child('games')
+        .child(docId)
+        .child(fieldName)
+        .child('${DateTime.now().millisecondsSinceEpoch}_${file.name}');
+    final bytes = file.bytes;
+    if (bytes == null) throw Exception('Picked file has no bytes');
+    await storageRef.putData(bytes);
+    final url = await storageRef.getDownloadURL();
+    return {'url': url, 'path': storageRef.fullPath};
+  }
+
+  Widget _buildImagePickerRow({
+    required String label,
+    required String? imageUrl,
+    required PlatformFile? pickedFile,
+    required bool uploading,
+    required VoidCallback onPick,
+  }) {
+    Widget preview;
+    if (uploading) {
+      preview = const SizedBox(
+        width: 64,
+        height: 64,
+        child: Center(child: CircularProgressIndicator()),
+      );
+    } else if (pickedFile != null) {
+      preview = Image.memory(
+        pickedFile.bytes!,
+        width: 64,
+        height: 64,
+        fit: BoxFit.cover,
+      );
+    } else if (imageUrl != null && imageUrl.isNotEmpty) {
+      preview = Image.network(
+        imageUrl,
+        width: 64,
+        height: 64,
+        fit: BoxFit.cover,
+      );
+    } else {
+      preview = Container(
+        width: 64,
+        height: 64,
+        color: Colors.grey[200],
+        child: const Icon(Icons.image),
+      );
+    }
+
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label),
+              const SizedBox(height: 6),
+              Text(
+                imageUrl ??
+                    (pickedFile != null
+                        ? pickedFile.name
+                        : 'No image selected'),
+                style: TextStyle(color: Colors.grey[700], fontSize: 12),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        preview,
+        const SizedBox(width: 8),
+        ElevatedButton.icon(
+          onPressed: onPick,
+          icon: const Icon(Icons.upload_file),
+          label: const Text('Pick'),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _pickImage(String field) async {
+    final result = await FilePicker.platform.pickFiles(
+      withData: true,
+      allowMultiple: false,
+      type: FileType.image,
+    );
+    if (result == null) return;
+    final file = result.files.single;
+    setState(() {
+      if (field == 'background') _backgroundPickedFile = file;
+      if (field == 'bottomLeft') _bottomLeftPickedFile = file;
+      if (field == 'bottomRight') _bottomRightPickedFile = file;
+    });
+    // If editing existing game, upload immediately
+    if (widget.gameId != null) {
+      try {
+        setState(() {
+          if (field == 'background') _bgUploading = true;
+          if (field == 'bottomLeft') _blUploading = true;
+          if (field == 'bottomRight') _brUploading = true;
+        });
+        final m = await _uploadPickedFile(
+          widget.gameId!,
+          file,
+          field == 'background'
+              ? 'backgroundImage'
+              : field == 'bottomLeft'
+              ? 'bottomLeftImage'
+              : 'bottomRightImage',
+        );
+        setState(() {
+          if (field == 'background') {
+            _backgroundUrl = m['url'];
+            _backgroundPath = m['path'];
+          }
+          if (field == 'bottomLeft') {
+            _bottomLeftUrl = m['url'];
+            _bottomLeftPath = m['path'];
+          }
+          if (field == 'bottomRight') {
+            _bottomRightUrl = m['url'];
+            _bottomRightPath = m['path'];
+          }
+        });
+      } catch (e) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Upload failed: $e')));
+      } finally {
+        setState(() {
+          if (field == 'background') _bgUploading = false;
+          if (field == 'bottomLeft') _blUploading = false;
+          if (field == 'bottomRight') _brUploading = false;
+        });
+      }
     }
   }
 
@@ -332,6 +577,15 @@ class _AddGamePageState extends State<AddGamePage> {
                 ),
                 const SizedBox(height: 8),
                 CheckboxListTile(
+                  title: const Text('Allow non-NU IDs to register'),
+                  subtitle: const Text(
+                    'If enabled, users without NU IDs can sign up',
+                  ),
+                  value: _allowNonNuIds,
+                  onChanged: (v) => setState(() => _allowNonNuIds = v ?? false),
+                ),
+                const SizedBox(height: 8),
+                CheckboxListTile(
                   title: const Text('Disable scoreboard for this game'),
                   value: _scoreboardDisabled,
                   onChanged: (v) =>
@@ -409,41 +663,29 @@ class _AddGamePageState extends State<AddGamePage> {
                   },
                 ),
                 const SizedBox(height: 12),
-                // Image URL fields
-                TextFormField(
-                  controller: _backgroundUrlCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Background image URL (optional)',
-                    hintText: 'https://...',
-                  ),
-                  validator: (v) =>
-                      (v != null && v.isNotEmpty && !v.startsWith('http'))
-                      ? 'Invalid URL'
-                      : null,
+                // Image upload fields (uploads to Firebase Storage; URL + storage path stored in Firestore)
+                _buildImagePickerRow(
+                  label: 'Background image (optional)',
+                  imageUrl: _backgroundUrl,
+                  pickedFile: _backgroundPickedFile,
+                  uploading: _bgUploading,
+                  onPick: () => _pickImage('background'),
                 ),
                 const SizedBox(height: 8),
-                TextFormField(
-                  controller: _bottomLeftUrlCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Bottom-left image URL (optional)',
-                    hintText: 'https://...',
-                  ),
-                  validator: (v) =>
-                      (v != null && v.isNotEmpty && !v.startsWith('http'))
-                      ? 'Invalid URL'
-                      : null,
+                _buildImagePickerRow(
+                  label: 'Bottom-left image (optional)',
+                  imageUrl: _bottomLeftUrl,
+                  pickedFile: _bottomLeftPickedFile,
+                  uploading: _blUploading,
+                  onPick: () => _pickImage('bottomLeft'),
                 ),
                 const SizedBox(height: 8),
-                TextFormField(
-                  controller: _bottomRightUrlCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Bottom-right image URL (optional)',
-                    hintText: 'https://...',
-                  ),
-                  validator: (v) =>
-                      (v != null && v.isNotEmpty && !v.startsWith('http'))
-                      ? 'Invalid URL'
-                      : null,
+                _buildImagePickerRow(
+                  label: 'Bottom-right image (optional)',
+                  imageUrl: _bottomRightUrl,
+                  pickedFile: _bottomRightPickedFile,
+                  uploading: _brUploading,
+                  onPick: () => _pickImage('bottomRight'),
                 ),
                 const SizedBox(height: 8),
                 ElevatedButton(
