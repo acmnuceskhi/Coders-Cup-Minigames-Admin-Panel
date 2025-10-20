@@ -52,6 +52,8 @@ class _AddGamePageState extends State<AddGamePage> {
   bool _scoreboardDisabled = false;
   // Whether to allow non-NU IDs to register for this game
   bool _allowNonNuIds = false;
+  // Whether registrations are active for this game
+  bool _registrationsActive = true;
   bool _saving = false;
 
   @override
@@ -109,6 +111,8 @@ class _AddGamePageState extends State<AddGamePage> {
       _scoreboardDisabled = d['scoreboardDisabled'] ?? false;
       // read allowNonNuIds if present in the document
       _allowNonNuIds = d['allowNonNuIds'] ?? false;
+      // read registrationsActive if present, default to true
+      _registrationsActive = d['registrationsActive'] ?? true;
     }
   }
 
@@ -134,6 +138,7 @@ class _AddGamePageState extends State<AddGamePage> {
         if (limit != null) 'limit': limit,
         'codeBased': _codeBased,
         'active': _active,
+        'registrationsActive': _registrationsActive,
         'scoreboardDisabled': _scoreboardDisabled,
         'allowNonNuIds': _allowNonNuIds,
         'description': _descriptionCtrl.text.trim(),
@@ -574,6 +579,16 @@ class _AddGamePageState extends State<AddGamePage> {
                   title: const Text('Active (show to users)'),
                   value: _active,
                   onChanged: (v) => setState(() => _active = v ?? false),
+                ),
+                const SizedBox(height: 8),
+                CheckboxListTile(
+                  title: const Text('Activate registrations'),
+                  subtitle: const Text(
+                    'Allow participants to register for this game',
+                  ),
+                  value: _registrationsActive,
+                  onChanged: (v) =>
+                      setState(() => _registrationsActive = v ?? false),
                 ),
                 const SizedBox(height: 8),
                 CheckboxListTile(
